@@ -4,7 +4,6 @@ import json
 import os
 import random
 from dotenv import load_dotenv
-from telebot.types import ChatAction
 
 load_dotenv()
 
@@ -183,7 +182,7 @@ def main(message):
 
     bot.send_chat_action(
         message.chat.id,
-        ChatAction.TYPING
+        'TYPING'
     )
 
     # =====================
