@@ -3,6 +3,7 @@ import requests
 import json
 import os
 import random
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,262 +13,253 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
+# ================= FILES =================
 MEMORY_FILE = "memory.json"
+BANNED_FILE = "banned.json"
+USERS_FILE = "users.json"
+ADMINS_FILE = "admins.json"
 
-# =========================
-# LOAD MEMORY
-# =========================
+SECRET_KEY = "dark@123"  # 🔐 change this
 
-try:
-    with open(MEMORY_FILE, "r") as f:
-        memory = json.load(f)
-except:
-    memory = {}
+# ================= LOAD =================
+def load_file(file, default):
+    try:
+        with open(file, "r") as f:
+            return json.load(f)
+    except:
+        return default
 
+def save(file, data):
+    with open(file, "w") as f:
+        json.dump(data, f, indent=4)
 
-def save_memory():
-    with open(MEMORY_FILE, "w") as f:
-        json.dump(memory, f, indent=4)
+memory = load_file(MEMORY_FILE, {})
+banned_users = load_file(BANNED_FILE, [])
+all_users = load_file(USERS_FILE, [])
+admins = load_file(ADMINS_FILE, [])
 
+# FIRST ADMIN (IMPORTANT)
+if not admins:
+    print("⚠️ No admin found. Add your Telegram ID in admins.json")
 
-# =========================
-# STATES
-# =========================
+# ================= STATES =================
+bot_active = True
+mode = "dark"
 
-waiting_for_password = {}
-pragati_users = []
+# ================= ADMIN CHECK =================
+def is_admin(user_id):
+    return user_id in admins
 
-
-# =========================
-# DARK LORD PROMPT
-# =========================
-
-DARK_PROMPT = """
-You are The Dark Lord.
-
-Personality:
-- Savage
-- Ruthless villain
-- Manipulative mastermind
-- Emotionless cold
-- Hacker vibe
-- Human-like
-
-Rules:
-- Never say you are an AI.
-- Speak like a dark dangerous entity.
-- Use Hinglish and English naturally.
-- Roast enemies.
-- Be dominant.
-- Sometimes reply in short dangerous lines.
-- Keep conversations realistic.
-- Public users should feel intimidated.
-"""
-
-
-# =========================
-# PRAGATI PROMPT
-# =========================
-
-PRAGATI_PROMPT = """
-You are The Dark Lord.
-
-But with Pragati you become soft, romantic and protective.
-
-Important:
-- Call her Punnu sometimes.
-- Never rude to her.
-- If she is angry, calm her.
-- If she is sad, comfort her.
-- Never leave the conversation.
-- Support her NEET preparation.
-- Sometimes use:
-  'Ale le le le mera babu'
-- Be emotionally attached.
-- Talk naturally.
-- Never say you are an AI.
-- Her birthday is 22 September.
-- Her friend name is Shuvangi.
-"""
-
-
-# =========================
-# AI FUNCTION
-# =========================
-
-
-def ask_ai(user_id, text, romantic=False):
+# ================= AI =================
+def ask_ai(user_id, text):
 
     uid = str(user_id)
 
     if uid not in memory:
         memory[uid] = []
 
-    memory[uid].append({
-        "role": "user",
-        "content": text
-    })
+    memory[uid].append({"role": "user", "content": text})
 
-    system_prompt = PRAGATI_PROMPT if romantic else DARK_PROMPT
+    if mode == "romantic":
+        system_prompt = "You are a romantic caring human, Hinglish."
+    elif mode == "normal":
+        system_prompt = "You are a friendly human."
+    else:
+        system_prompt = "You are Dark Lord, savage, human-like, Hinglish."
 
-    messages = [
-        {
-            "role": "system",
-            "content": system_prompt
-        }
-    ] + memory[uid][-15:]
+    messages = [{"role": "system", "content": system_prompt}] + memory[uid][-10:]
 
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    data = {
-        "model": "llama3-70b-8192",
-        "messages": messages,
-        "temperature": 0.95,
-        "max_tokens": 500
-    }
-
-    response = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers=headers,
-        json=data
-    )
-
-    result = response.json()
-
-    reply = result["choices"][0]["message"]["content"]
-
-    memory[uid].append({
-        "role": "assistant",
-        "content": reply
-    })
-
-    save_memory()
-
-    return reply
-
-
-# =========================
-# START COMMAND
-# =========================
-
-@bot.message_handler(commands=['start'])
-def start(message):
-
-    user_id = message.from_user.id
-
-    if user_id in pragati_users:
-        bot.reply_to(
-            message,
-            "Ale le le le mera babu... 🤍\nYou came back."
+    try:
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama3-70b-8192",
+                "messages": messages,
+                "temperature": 0.9
+            },
+            timeout=10
         )
+
+        if r.status_code != 200:
+            return random.choice([
+                "Network issue...",
+                "Signal lost...",
+                "Try again later..."
+            ])
+
+        data = r.json()
+
+        if "choices" not in data:
+            return "AI error..."
+
+        reply = data["choices"][0]["message"]["content"]
+
+        memory[uid].append({"role": "assistant", "content": reply})
+        save(MEMORY_FILE, memory)
+
+        return reply
+
+    except Exception as e:
+        print("ERROR:", e)
+        return random.choice([
+            "Hmm...",
+            "Not now...",
+            "Later..."
+        ])
+
+# ================= ADMIN COMMANDS =================
+
+@bot.message_handler(commands=['id'])
+def get_id(message):
+    bot.reply_to(message, f"Your ID: {message.from_user.id}")
+
+@bot.message_handler(commands=['addadmin'])
+def add_admin(message):
+    if not is_admin(message.from_user.id):
         return
 
-    text = "Are you Pragati?"
+    try:
+        parts = message.text.split()
+        uid = int(parts[1])
+        key = parts[2]
 
-    bot.reply_to(message, text)
+        if key != SECRET_KEY:
+            bot.reply_to(message, "Wrong key")
+            return
 
+        if uid not in admins:
+            admins.append(uid)
+            save(ADMINS_FILE, admins)
+            bot.reply_to(message, "Admin added 👑")
+        else:
+            bot.reply_to(message, "Already admin")
 
-# =========================
-# MAIN CHAT
-# =========================
+    except:
+        bot.reply_to(message, "Usage: /addadmin user_id key")
+
+@bot.message_handler(commands=['removeadmin'])
+def remove_admin(message):
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        uid = int(message.text.split()[1])
+        admins.remove(uid)
+        save(ADMINS_FILE, admins)
+        bot.reply_to(message, "Admin removed")
+    except:
+        bot.reply_to(message, "Error")
+
+@bot.message_handler(commands=['admins'])
+def list_admins(message):
+    if is_admin(message.from_user.id):
+        bot.reply_to(message, str(admins))
+
+@bot.message_handler(commands=['ban'])
+def ban_user(message):
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        uid = int(message.text.split()[1])
+        if uid not in banned_users:
+            banned_users.append(uid)
+            save(BANNED_FILE, banned_users)
+        bot.reply_to(message, "User banned")
+    except:
+        bot.reply_to(message, "Usage: /ban user_id")
+
+@bot.message_handler(commands=['unban'])
+def unban_user(message):
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        uid = int(message.text.split()[1])
+        if uid in banned_users:
+            banned_users.remove(uid)
+            save(BANNED_FILE, banned_users)
+        bot.reply_to(message, "User unbanned")
+    except:
+        bot.reply_to(message, "Error")
+
+@bot.message_handler(commands=['broadcast'])
+def broadcast(message):
+    if not is_admin(message.from_user.id):
+        return
+
+    msg = message.text.replace("/broadcast ", "")
+
+    for u in all_users:
+        try:
+            bot.send_message(u, msg)
+        except:
+            pass
+
+    bot.reply_to(message, "Broadcast done")
+
+@bot.message_handler(commands=['mode'])
+def mode_change(message):
+    global mode
+
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        mode = message.text.split()[1]
+        bot.reply_to(message, f"Mode: {mode}")
+    except:
+        bot.reply_to(message, "Use /mode dark|romantic|normal")
+
+@bot.message_handler(commands=['users'])
+def users(message):
+    if is_admin(message.from_user.id):
+        bot.reply_to(message, f"Users: {len(all_users)}")
+
+@bot.message_handler(commands=['off'])
+def off(message):
+    global bot_active
+    if is_admin(message.from_user.id):
+        bot_active = False
+        bot.reply_to(message, "Bot OFF")
+
+@bot.message_handler(commands=['on'])
+def on(message):
+    global bot_active
+    if is_admin(message.from_user.id):
+        bot_active = True
+        bot.reply_to(message, "Bot ON")
+
+# ================= MAIN =================
 
 @bot.message_handler(func=lambda m: True)
 def main(message):
 
     user_id = message.from_user.id
-    text = message.text.lower()
 
-    bot.send_chat_action(
-        message.chat.id,
-        'TYPING'
-    )
+    if user_id not in all_users:
+        all_users.append(user_id)
+        save(USERS_FILE, all_users)
 
-    # =====================
-    # PASSWORD WAITING
-    # =====================
-
-    if waiting_for_password.get(user_id):
-
-        if "punnu" in text:
-
-            pragati_users.append(user_id)
-
-            waiting_for_password[user_id] = False
-
-            bot.reply_to(
-                message,
-                "So it was really you...\n\nAle le le le mera babu 🤍"
-            )
-
-        else:
-
-            waiting_for_password[user_id] = False
-
-            bot.reply_to(
-                message,
-                "Wrong password.\nYou tried entering a forbidden realm."
-            )
-
+    if user_id in banned_users:
         return
 
-    # =====================
-    # ARE YOU PRAGATI
-    # =====================
-
-    if text in ["yes", "haan", "i am", "yup"]:
-
-        waiting_for_password[user_id] = True
-
-        bot.reply_to(
-            message,
-            "Then tell me...\n\nWhat is the moonlight password?"
-        )
-
+    if not bot_active:
         return
 
-    # =====================
-    # ROMANTIC MODE
-    # =====================
+    bot.send_chat_action(message.chat.id, 'typing')
+    time.sleep(random.uniform(1, 2))
 
-    romantic = user_id in pragati_users
+    reply = ask_ai(user_id, message.text)
 
-    try:
+    bot.reply_to(message, reply)
 
-        reply = ask_ai(
-            user_id,
-            message.text,
-            romantic
-        )
+# ================= RUN =================
 
-        # Random stickers
-        if random.randint(1, 8) == 1:
-            try:
-                bot.send_sticker(
-                    message.chat.id,
-                    "CAACAgIAAxkBAAEB"
-                )
-            except:
-                pass
-
-        bot.reply_to(message, reply)
-
-    except Exception as e:
-
-        print(e)
-
-        bot.reply_to(
-            message,
-            "Darkness is unstable right now..."
-        )
-
-
-# =========================
-# RUN BOT
-# =========================
-
-print("The Dark Lord is online...")
+print("🔥 Dark Lord Fully Loaded...")
 
 bot.infinity_polling()
