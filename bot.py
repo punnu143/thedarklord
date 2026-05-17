@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+TELEGRAM_TOKEN = os.getenv("8743638992:AAHaA5aE-hr_Lzo0d-UzjLhnBLJuQl5kNQ")
+GROQ_API_KEY = os.getenv("dQRmRUfqzFLUOY1HeR9mWGdyb3FYuTbaWWlRCIyvWX0dvl8N4j6I")
 
 print("TOKEN:", TELEGRAM_TOKEN)
 print("API KEY:", GROQ_API_KEY)
