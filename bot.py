@@ -79,4 +79,8 @@ def ask_ai(user_id, text):
         mood = detect_mood(text)
 
         if mood == "sad":
-            extra = "She
+    extra = "She is sad. Comfort her deeply."
+elif mood == "angry":
+    extra = "She is angry. Calm her softly."
+else:
+    extra = "Flirt lightly and talk sweet."
