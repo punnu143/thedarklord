@@ -1,8 +1,6 @@
 import telebot
 import requests
-import json
 import os
-import random
 import time
 from dotenv import load_dotenv
 
@@ -13,74 +11,42 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-MEMORY_FILE = "memory.json"
-
-def load_file(file, default):
+def ask_ai(text):
     try:
-        with open(file, "r") as f:
-            return json.load(f)
-    except:
-        return default
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama3-70b-8192",
+                "messages": [
+                    {"role": "system", "content": "Talk like a real human in Hinglish."},
+                    {"role": "user", "content": text}
+                ]
+            },
+            timeout=10
+        )
 
-def save(file, data):
-    with open(file, "w") as f:
-        json.dump(data, f, indent=4)
+        if r.status_code != 200:
+            return "Server busy..."
 
-memory = load_file(MEMORY_FILE, {})
+        data = r.json()
+        return data["choices"][0]["message"]["content"]
 
-# ===== GF SETTINGS =====
-GF_ID = None
-GF_NAME = "Punnu"
+    except Exception as e:
+        print("ERROR:", e)
+        return "Error aa gaya..."
 
-# ===== PROMPTS =====
+@bot.message_handler(func=lambda m: True)
+def main(message):
+    bot.send_chat_action(message.chat.id, 'typing')
+    time.sleep(1)
 
-NORMAL_PROMPT = """
-You are a real human chatting casually in Hinglish.
-Talk natural, short sometimes, long sometimes.
-Do not act like AI.
-"""
+    reply = ask_ai(message.text)
+    bot.reply_to(message, reply)
 
-ROMANTIC_BASE = f"""
-You are a loving boyfriend.
+print("Bot Running...")
 
-Rules:
-- Call her {GF_NAME} sometimes
-- Be caring, soft and emotional
-- Flirt naturally, not cringe
-- Be slightly possessive but not toxic
-- Talk like real human
-- Mix short and long replies
-"""
-
-# ===== MOOD DETECT =====
-
-def detect_mood(text):
-    text = text.lower()
-    if any(x in text for x in ["sad", "rona", "cry", "hurt", "upset"]):
-        return "sad"
-    elif any(x in text for x in ["gussa", "angry", "mad"]):
-        return "angry"
-    return "normal"
-
-# ===== AI =====
-
-def ask_ai(user_id, text):
-
-    uid = str(user_id)
-
-    if uid not in memory:
-        memory[uid] = []
-
-    memory[uid].append({"role": "user", "content": text})
-
-    # GF mode
-    if user_id == GF_ID:
-
-        mood = detect_mood(text)
-
-        if mood == "sad":
-    extra = "She is sad. Comfort her deeply."
-elif mood == "angry":
-    extra = "She is angry. Calm her softly."
-else:
-    extra = "Flirt lightly and talk sweet."
+bot.infinity_polling()
